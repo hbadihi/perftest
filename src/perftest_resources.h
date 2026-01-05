@@ -852,20 +852,49 @@ static __inline int ctx_notify_events(struct ibv_comp_channel *channel)
 
 static __inline void increase_rem_addr(struct ibv_send_wr *wr,int size,uint64_t scnt,uint64_t prim_addr,VerbType verb, int cache_line_size, int cycle_buffer)
 {
+	uint64_t old_addr, new_addr;
+	int increment = INC(size,cache_line_size);
+	int ops_per_cycle = cycle_buffer / increment;
+	
+	// Get current address before increment
 	if (verb == ATOMIC)
-		wr->wr.atomic.remote_addr += INC(size,cache_line_size);
-
+		old_addr = wr->wr.atomic.remote_addr;
 	else
-		wr->wr.rdma.remote_addr += INC(size,cache_line_size);
+		old_addr = wr->wr.rdma.remote_addr;
+	
+	printf("[increase_rem_addr] scnt=%lu, verb=%s, size=%d, cache_line_size=%d\n", 
+	       scnt, (verb == ATOMIC) ? "ATOMIC" : "RDMA", size, cache_line_size);
+	printf("  Increment amount: %d bytes (cycle_buffer=%d, ops_per_cycle=%d)\n", 
+	       increment, cycle_buffer, ops_per_cycle);
+	printf("  Old remote_addr: 0x%lx\n", old_addr);
+	
+	// Increment the address
+	if (verb == ATOMIC)
+		wr->wr.atomic.remote_addr += increment;
+	else
+		wr->wr.rdma.remote_addr += increment;
 
-	if ( ((scnt+1) % (cycle_buffer/ INC(size,cache_line_size))) == 0) {
-
+	// Check if we need to wrap around
+	if ( ((scnt+1) % ops_per_cycle) == 0) {
+		printf("  WRAP-AROUND detected at operation %lu (cycle completed)\n", scnt+1);
+		printf("  Resetting remote_addr from 0x%lx to prim_addr 0x%lx\n", 
+		       (verb == ATOMIC) ? wr->wr.atomic.remote_addr : wr->wr.rdma.remote_addr, 
+		       prim_addr);
+		
 		if (verb == ATOMIC)
 			wr->wr.atomic.remote_addr = prim_addr;
-
 		else
 			wr->wr.rdma.remote_addr = prim_addr;
 	}
+	
+	// Get new address after increment/wrap
+	if (verb == ATOMIC)
+		new_addr = wr->wr.atomic.remote_addr;
+	else
+		new_addr = wr->wr.rdma.remote_addr;
+	
+	printf("  New remote_addr: 0x%lx (offset from prim_addr: +%ld bytes)\n\n", 
+	       new_addr, new_addr - prim_addr);
 }
 
 /*

@@ -908,10 +908,13 @@ int set_up_connection(struct pingpong_context *ctx,
 
 		/* Each qp gives his receive buffer address.*/
 		my_dest[i].out_reads = user_param->out_reads;
+		uint64_t offset_size = (user_param->qp_buffer_offset > 0) 
+			? user_param->qp_buffer_offset 
+			: BUFF_SIZE(ctx->size, ctx->cycle_buffer);
 		if (user_param->mr_per_qp)
-			my_dest[i].vaddr = (uintptr_t)ctx->buf[i] + BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+			my_dest[i].vaddr = (uintptr_t)ctx->buf[i] + offset_size;
 		else
-			my_dest[i].vaddr = (uintptr_t)ctx->buf[0] + (user_param->num_of_qps + i)*BUFF_SIZE(ctx->size,ctx->cycle_buffer);
+			my_dest[i].vaddr = (uintptr_t)ctx->buf[0] + (user_param->num_of_qps + i) * offset_size;
 
 		if (user_param->dualport==ON) {
 

@@ -4570,6 +4570,28 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 
 	user_param->tposted[0] = get_cycles();
 
+	/* Print local and remote addresses for atomic operations (debug) */
+	if (user_param->verb == ATOMIC) {
+		printf("\n=== Atomic Operation Address Mapping ===\n");
+		printf("QP Buffer Offset: %lu bytes (0x%lx)\n", 
+		       user_param->qp_buffer_offset > 0 ? user_param->qp_buffer_offset : (uint64_t)user_param->cycle_buffer,
+		       user_param->qp_buffer_offset > 0 ? user_param->qp_buffer_offset : (uint64_t)user_param->cycle_buffer);
+		printf("\n");
+		for (i = 0; i < num_of_qps; i++) {
+			uint64_t local_addr = (uint64_t)ctx->buf[i];
+			uint64_t remote_addr = ctx->wr[i * user_param->post_list].wr.atomic.remote_addr;
+			printf("QP[%2d]: Local = %p (0x%016lx), Remote = 0x%016lx",
+			       i, ctx->buf[i], local_addr, remote_addr);
+			if (i > 0) {
+				uint64_t local_diff = local_addr - (uint64_t)ctx->buf[i-1];
+				uint64_t remote_diff = remote_addr - ctx->wr[(i-1) * user_param->post_list].wr.atomic.remote_addr;
+				printf(" [Δ Local: %lu, Δ Remote: %lu]", local_diff, remote_diff);
+			}
+			printf("\n");
+		}
+		printf("========================================\n\n");
+	}
+
 	/* main loop for posting */
 	while (1) {
 	/* main loop to run over all the qps and post each time n messages */

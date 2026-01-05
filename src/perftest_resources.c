@@ -2200,9 +2200,12 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 			}
 			mr_index++;
 		} else {
+			uint64_t offset_size = (user_param->qp_buffer_offset > 0) 
+				? user_param->qp_buffer_offset 
+				: BUFF_SIZE(ctx->size, ctx->cycle_buffer);
 			ctx->mr[i] = ctx->mr[0];
 			// cppcheck-suppress arithOperationsOnVoidPointer
-			ctx->buf[i] = ctx->buf[0] + (i*BUFF_SIZE(ctx->size, ctx->cycle_buffer));
+			ctx->buf[i] = ctx->buf[0] + (i * offset_size);
 		}
 	}
 

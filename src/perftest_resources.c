@@ -4589,11 +4589,21 @@ int run_iter_bw_infinitely(struct pingpong_context *ctx,struct perftest_paramete
 					return_value = FAILURE;
 					goto cleaning;
 				}
-				ctx->scnt[index] += user_param->post_list;
-				scnt_for_qp[index] += user_param->post_list;
-				totscnt += user_param->post_list;
+			ctx->scnt[index] += user_param->post_list;
+			scnt_for_qp[index] += user_param->post_list;
+			totscnt += user_param->post_list;
 
-				/* ask for completion on this wr */
+			/* Print QP addresses every 1000 operations for atomic debugging */
+			if (user_param->verb == ATOMIC && ctx->scnt[index] % 1000 == 0) {
+				printf("QP[%d] scnt=%lu: Local addr=0x%016lx, Remote addr=0x%016lx, Remote rkey=0x%08x\n",
+					index,
+					ctx->scnt[index],
+					(unsigned long)ctx->wr[index].sg_list->addr,
+					(unsigned long)ctx->wr[index].wr.atomic.remote_addr,
+					ctx->wr[index].wr.atomic.rkey);
+			}
+
+			/* ask for completion on this wr */
 				if (user_param->post_list == 1 &&
 						(ctx->scnt[index]%user_param->cq_mod == user_param->cq_mod - 1 ||
 							(user_param->test_type == ITERATIONS && ctx->scnt[index] == user_param->iters - 1))) {

@@ -3888,14 +3888,6 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 		user_param->mr_per_qp = 1;
 	}
 
-	if (qp_buffer_offset_flag) {
-		user_param->qp_buffer_offset = strtoul(optarg, NULL, 0);
-		if (user_param->qp_buffer_offset < 8) {
-			fprintf(stderr, " qp_offset must be at least 8 bytes\n");
-			return FAILURE;
-		}
-	}
-
 	if (perform_warm_up_flag) {
 		user_param->perform_warm_up = 1;
 	}

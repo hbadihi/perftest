@@ -657,6 +657,7 @@ struct perftest_parameters {
 	int				masked_atomics;
 	int				cycle_buffer;
 	uint64_t			qp_buffer_offset;  /* Custom buffer offset between QPs (0 = use default) */
+	uint64_t			qp_start_offset;   /* Starting offset for first QP (0 = start at buffer base) */
 	int				cache_line_size;
 	int				mr_per_qp;
 	uint16_t			dlid;

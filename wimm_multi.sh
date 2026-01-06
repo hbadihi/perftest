@@ -1,8 +1,13 @@
 #!/bin/bash
 # Script to run multiple write_with_imm processes with different ports
+# Automatically calculates qp_start_offset per process to avoid NIC lock contention
 # Usage:
 #   Server: ./wimm_multi.sh --queue_num <num> [--start_port <port>] [--num_processes <num>] [--qp_offset <offset>] [--device <device>] [--numa_node <0|1>]
 #   Client: ./wimm_multi.sh --queue_num <num> --server_host <host> [--start_port <port>] [--num_processes <num>] [--qp_offset <offset>] [--device <device>] [--numa_node <0|1>]
+#
+# Note: When --qp_offset is specified, each process automatically gets a unique qp_start_offset
+#       calculated as: process_index * queue_num * qp_offset
+#       This prevents NIC page-offset lock contention between processes.
 # Default values
 QUEUE_NUM=""
 START_PORT=4444
@@ -127,6 +132,8 @@ for i in $(seq 0 $((NUM_PROCESSES - 1))); do
     
     # Build QP offset parameter if specified
     QP_OFFSET_PARAM=""
+    QP_START_OFFSET_PARAM=""
+    
     if [ -n "$QP_OFFSET" ]; then
         # Validate QP offset is at least 8 bytes
         if [ "$QP_OFFSET" -lt 8 ]; then
@@ -134,7 +141,13 @@ for i in $(seq 0 $((NUM_PROCESSES - 1))); do
             exit 1
         fi
         QP_OFFSET_PARAM="--qp_offset=$QP_OFFSET"
-        echo "Starting process $i on port $PORT with QP offset $QP_OFFSET, msg size ${MSG_SIZE}B (inline ${INLINE_SIZE}B) on CPU $CPU"
+        
+        # Calculate start offset for this process to avoid NIC lock contention
+        # Each process starts at: process_index * queue_num * qp_offset
+        QP_START_OFFSET=$((i * QUEUE_NUM * QP_OFFSET))
+        QP_START_OFFSET_PARAM="--qp_start_offset=$QP_START_OFFSET"
+        
+        echo "Starting process $i on port $PORT with QP offset $QP_OFFSET, start offset $QP_START_OFFSET, msg size ${MSG_SIZE}B (inline ${INLINE_SIZE}B) on CPU $CPU"
     else
         echo "Starting process $i on port $PORT, msg size ${MSG_SIZE}B (inline ${INLINE_SIZE}B) on CPU $CPU"
     fi
@@ -150,20 +163,20 @@ for i in $(seq 0 $((NUM_PROCESSES - 1))); do
     
     if [ "$MODE" = "CLIENT" ]; then
         # Client mode: connect to server
-        CMD="taskset -c $CPU ./ib_write_bw --write_with_imm -I $INLINE_SIZE -q $QUEUE_NUM $DEVICE_PARAM -s $MSG_SIZE $QP_OFFSET_PARAM -p $PORT -t 1 --run_infinitely --out_json --out_json_file=$JSON_FILE $SERVER_HOST"
+        CMD="taskset -c $CPU ./ib_write_bw --write_with_imm -I $INLINE_SIZE -q $QUEUE_NUM $DEVICE_PARAM -s $MSG_SIZE $QP_OFFSET_PARAM $QP_START_OFFSET_PARAM -p $PORT -t 1 --run_infinitely --out_json --out_json_file=$JSON_FILE $SERVER_HOST"
         echo "Command: $CMD" > "$LOG_FILE"
         echo "========================================" >> "$LOG_FILE"
         echo "" >> "$LOG_FILE"
-        taskset -c $CPU ./ib_write_bw --write_with_imm -I $INLINE_SIZE -q $QUEUE_NUM $DEVICE_PARAM -s $MSG_SIZE $QP_OFFSET_PARAM -p $PORT \
+        taskset -c $CPU ./ib_write_bw --write_with_imm -I $INLINE_SIZE -q $QUEUE_NUM $DEVICE_PARAM -s $MSG_SIZE $QP_OFFSET_PARAM $QP_START_OFFSET_PARAM -p $PORT \
             -t 1 --run_infinitely --out_json --out_json_file="$JSON_FILE" \
             $SERVER_HOST >> "$LOG_FILE" 2>&1 &
     else
         # Server mode: wait for connections
-        CMD="taskset -c $CPU ./ib_write_bw --write_with_imm -I $INLINE_SIZE -q $QUEUE_NUM $DEVICE_PARAM -s $MSG_SIZE $QP_OFFSET_PARAM -p $PORT -t 1 --run_infinitely --out_json --out_json_file=$JSON_FILE"
+        CMD="taskset -c $CPU ./ib_write_bw --write_with_imm -I $INLINE_SIZE -q $QUEUE_NUM $DEVICE_PARAM -s $MSG_SIZE $QP_OFFSET_PARAM $QP_START_OFFSET_PARAM -p $PORT -t 1 --run_infinitely --out_json --out_json_file=$JSON_FILE"
         echo "Command: $CMD" > "$LOG_FILE"
         echo "========================================" >> "$LOG_FILE"
         echo "" >> "$LOG_FILE"
-        taskset -c $CPU ./ib_write_bw --write_with_imm -I $INLINE_SIZE -q $QUEUE_NUM $DEVICE_PARAM -s $MSG_SIZE $QP_OFFSET_PARAM -p $PORT \
+        taskset -c $CPU ./ib_write_bw --write_with_imm -I $INLINE_SIZE -q $QUEUE_NUM $DEVICE_PARAM -s $MSG_SIZE $QP_OFFSET_PARAM $QP_START_OFFSET_PARAM -p $PORT \
             -t 1 --run_infinitely --out_json --out_json_file="$JSON_FILE" \
             >> "$LOG_FILE" 2>&1 &
     fi

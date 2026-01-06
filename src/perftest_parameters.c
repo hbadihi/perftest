@@ -279,6 +279,10 @@ static void usage(const char *argv0, VerbType verb, TestType tst, int connection
 		printf(" Buffer offset between QPs in bytes (default: page_size)\n");
 		printf("                           Controls address spacing between QPs (min: 8 bytes)\n");
 		printf("                           Example: --qp_offset=64 for cache-line spacing\n");
+		printf("      --qp_start_offset=<bytes> ");
+		printf(" Starting offset for first QP in bytes (default: 0)\n");
+		printf("                           Use to avoid NIC lock contention across processes\n");
+		printf("                           Example: Process 0 uses 0, Process 1 uses 64\n");
 	}
 
 	if (tst == BW) {
@@ -1002,6 +1006,7 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 		user_param->cycle_buffer = DEF_PAGE_SIZE;
 	}
 	user_param->qp_buffer_offset		= 0;  /* 0 means use default cycle_buffer */
+	user_param->qp_start_offset		= 0;  /* 0 means start at buffer base */
 	user_param->mr_per_qp			= 0;
 	user_param->dlid			= 0;
 	user_param->traffic_class		= 0;
@@ -2646,6 +2651,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 	static int raw_mcast_flag = 0;
 	static int mr_per_qp_flag = 0;
 	static int qp_buffer_offset_flag = 0;
+	static int qp_start_offset_flag = 0;
 	static int dlid_flag = 0;
 	static int tclass_flag = 0;
 	static int wait_destroy_flag = 0;
@@ -2843,6 +2849,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 			{.name = "mr_per_qp", .has_arg = 0, .flag = &mr_per_qp_flag, .val = 1},
 			{.name = "qp_offset", .has_arg = 1, .flag = &qp_buffer_offset_flag, .val = 1},
+			{.name = "qp_start_offset", .has_arg = 1, .flag = &qp_start_offset_flag, .val = 1},
 			{.name = "dlid", .has_arg = 1, .flag = &dlid_flag, .val = 1},
 			{.name = "tclass", .has_arg = 1, .flag = &tclass_flag, .val = 1},
 			{.name = "wait_destroy", .has_arg = 1, .flag = &wait_destroy_flag, .val = 1},
@@ -3488,6 +3495,11 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 						return FAILURE;
 					}
 					qp_buffer_offset_flag = 0;
+				}
+				if (qp_start_offset_flag) {
+					user_param->qp_start_offset = strtoul(optarg, NULL, 0);
+					/* No minimum validation - can be 0 */
+					qp_start_offset_flag = 0;
 				}
 				if (tclass_flag) {
 					CHECK_VALUE(user_param->traffic_class,uint16_t,"traffic class",not_int_ptr);

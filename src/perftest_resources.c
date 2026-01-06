@@ -1247,6 +1247,14 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 
 	num_of_qps_factor = (user_param->mr_per_qp) ? 1 : user_param->num_of_qps;
 
+	/* Calculate QP spacing for buffer size adjustment */
+	uint64_t qp_spacing = (user_param->qp_buffer_offset > 0) 
+		? user_param->qp_buffer_offset 
+		: BUFF_SIZE(ctx->size, ctx->cycle_buffer);
+
+	uint64_t max_qp_offset = user_param->qp_start_offset + 
+		((user_param->num_of_qps - 1) * qp_spacing);
+
 	/* holds the size of maximum between msg size and cycle buffer,
 	 * aligned to cache line, it is multiplied by 2 to be used as
 	 * send buffer(first half) and receive buffer(second half)
@@ -1259,6 +1267,13 @@ int alloc_ctx(struct pingpong_context *ctx,struct perftest_parameters *user_para
 	user_param->buff_size = ctx->buff_size;
 	if (user_param->connection_type == UD)
 		ctx->buff_size += ctx->cache_line_size;
+
+	/* Add extra space for qp_start_offset and maximum QP offset
+	 * Add one more qp_spacing as safety margin to prevent overruns */
+	if (user_param->qp_start_offset > 0 || user_param->qp_buffer_offset > 0) {
+		uint64_t extra_space = max_qp_offset + qp_spacing + ctx->size;
+		ctx->buff_size += extra_space;
+	}
 
 	ctx->memory = user_param->memory_create(user_param);
 
@@ -2190,6 +2205,12 @@ int create_mr(struct pingpong_context *ctx, struct perftest_parameters *user_par
 		return 1;
 	}
 	mr_index++;
+
+	/* Apply qp_start_offset to the base buffer pointer */
+	if (user_param->qp_start_offset > 0) {
+		// cppcheck-suppress arithOperationsOnVoidPointer
+		ctx->buf[0] = ctx->buf[0] + user_param->qp_start_offset;
+	}
 
 	/* create the rest if needed, or copy the first one */
 	for (i = 1; i < user_param->num_of_qps; i++) {
@@ -3765,6 +3786,7 @@ int ctx_set_recv_wqes(struct pingpong_context *ctx,struct perftest_parameters *u
 
 	for (k = 0; i < user_param->num_of_qps; i++,k++) {
 		if (!user_param->mr_per_qp) {
+			/* Note: buf[0] already includes qp_start_offset from create_mr() */
 			ctx->recv_sge_list[i * user_param->recv_post_list].addr = (uintptr_t)ctx->buf[0] +
 				(num_of_qps + k) * ctx->send_qp_buff_size;
 		} else {
